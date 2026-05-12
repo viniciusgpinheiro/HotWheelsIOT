@@ -1,121 +1,284 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_browser_client.dart'; // Usado para rodar no Chrome
 
 void main() {
-  runApp(const MyApp());
+  runApp(const HotWheelsLabApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class HotWheelsLabApp extends StatelessWidget {
+  const HotWheelsLabApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'TI328 - Automação Hot Wheels',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        brightness: Brightness.dark,
+        primarySwatch: Colors.orange,
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const DashboardScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _DashboardScreenState extends State<DashboardScreen> {
+  // ==========================================
+  // CONFIGURAÇÕES BROKER MQTT
+  // ==========================================
+  final String brokerUrl = 'wss://SEU_BROKER.COM'; // Ex: wss://broker.hivemq.com (Use wss:// para web)
+  final int brokerPort = 8884;
+  final String mqttUser = 'SEU_USUARIO';
+  final String mqttPass = 'SUA_SENHA';
+  final String mqttTopic = 'SEU/TOPICO/AQUI'; // O mesmo TOPIC_PUB do ESP32
 
-  void _incrementCounter() {
+  MqttBrowserClient? client;
+  bool isConnected = false;
+  String mensagemRecebida = 'Nenhuma mensagem ainda...';
+
+  @override
+  void initState() {
+    super.initState();
+    _setupMqtt();
+  }
+
+  Future<void> _setupMqtt() async {
+    // Configura o cliente para WebSockets
+    client = MqttBrowserClient(brokerUrl, 'flutter_web_client_${DateTime.now().millisecondsSinceEpoch}');
+    client!.port = brokerPort;
+    client!.keepAlivePeriod = 20;
+    client!.onConnected = _onConnected;
+    client!.onDisconnected = _onDisconnected;
+
+    final connMess = MqttConnectMessage()
+        .withClientIdentifier('flutter_web_client')
+        .authenticateAs(mqttUser, mqttPass)
+        .startClean()
+        .withWillQos(MqttQos.atLeastOnce);
+    
+    client!.connectionMessage = connMess;
+
+    try {
+      print('Conectando ao broker MQTT...');
+      await client!.connect();
+    } catch (e) {
+      print('Erro ao conectar: $e');
+      client!.disconnect();
+    }
+
+    // Se conectou com sucesso, inscreve no tópico
+    if (client!.connectionStatus!.state == MqttConnectionState.connected) {
+      client!.subscribe(mqttTopic, MqttQos.atMostOnce);
+      
+      // Fica escutando as mensagens do ESP32
+      client!.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
+        final recMess = c![0].payload as MqttPublishMessage;
+        final payload = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+        
+        print('Mensagem recebida: $payload');
+        
+        // Atualiza a tela com o valor recebido
+        setState(() {
+          try {
+            var data = jsonDecode(payload);
+            if (data.containsKey('msg')) {
+              mensagemRecebida = data['msg'];
+            }
+          } catch (e) {
+            mensagemRecebida = payload; // Se não for JSON, mostra o texto puro
+          }
+        });
+      });
+    }
+  }
+
+  void _onConnected() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      isConnected = true;
     });
+    print('MQTT Conectado com sucesso!');
+  }
+
+  void _onDisconnected() {
+    setState(() {
+      isConnected = false;
+    });
+    print('MQTT Desconectado!');
+  }
+
+  // Função disparada ao apertar o botão
+  void _lancarCarrinho() {
+    if (isConnected && client != null) {
+      const comandoStr = '{"comando": "LANCAR"}';
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(comandoStr);
+      
+      client!.publishMessage(mqttTopic, MqttQos.atLeastOnce, builder.payload!);
+      print('Comando de lançamento enviado!');
+    } else {
+      print('Não é possível lançar: MQTT Desconectado.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Projeto Hot Wheels'),
+        centerTitle: true,
+        backgroundColor: Colors.black12,
+        actions: [
+          // Ícone muda de cor dependendo da conexão
+          IconButton(
+            icon: Icon(
+              isConnected ? Icons.wifi : Icons.wifi_off,
+              color: isConnected ? Colors.green : Colors.red,
+            ),
+            onPressed: () {},
+            tooltip: isConnected ? 'Conectado' : 'Desconectado',
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            // --- Área de Status do ESP32 ---
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.memory, color: Colors.amber),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'ESP32 Diz: $mensagemRecebida',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // --- Seção de Controle ---
+            _buildSectionTitle('Controle do Lançador'),
+            const SizedBox(height: 10),
+            Center(
+              child: SizedBox(
+                width: 200,
+                height: 200,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isConnected ? Colors.redAccent : Colors.grey,
+                    foregroundColor: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 8,
+                  ),
+                  onPressed: isConnected ? _lancarCarrinho : null,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.rocket_launch, size: 50),
+                      Text(
+                        isConnected ? 'LANÇAR' : 'OFFLINE', 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+
+            _buildSectionTitle('Configuração da Pista'),
+            Row(
+              children: [
+                Expanded(child: _buildInputField('Altura (cm)', Icons.height)),
+                const SizedBox(width: 10),
+                Expanded(child: _buildInputField('Distância (cm) até o sensor', Icons.straighten)),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            _buildSectionTitle('Telemetria do Último Lançamento'),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.5,
+              children: [
+                _buildDataCard('Velocidade', '0.00 m/s', Icons.speed, Colors.greenAccent),
+                _buildDataCard('Tempo Total', '0.000 s', Icons.timer, Colors.blueAccent),
+                _buildDataCard('Aceleração', '0.0 m/s²', Icons.trending_up, Colors.orangeAccent),
+                _buildDataCard('E. Cinética', '0.00 J', Icons.bolt, Colors.purpleAccent),
+              ],
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+      ),
+    );
+  }
+
+  Widget _buildInputField(String label, IconData icon) {
+    return TextField(
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+    );
+  }
+
+  Widget _buildDataCard(String title, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 5),
+                Text(title, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }
