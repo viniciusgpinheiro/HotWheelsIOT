@@ -1,6 +1,7 @@
 from machine import Pin, PWM
 from time import sleep
 from umqtt import MQTTClient
+from servo import lancar
 import machine
 import network
 import onewire
@@ -45,6 +46,8 @@ def servo_motor():
 
 
 # --- umqtt ---
+
+# v1
 def cbTrataMsg(topic, msg):
     global servo_etapa, servo_tempo
 
@@ -54,6 +57,16 @@ def cbTrataMsg(topic, msg):
     if data.get("fire") and servo_etapa == 0:
         servo_etapa = 1
         servo_tempo = time.ticks_ms()
+
+# v2
+def cbTrataMsg(topic, msg):
+    comando = msg.decode()
+    print("Mensagem recebida:")
+    print(comando)
+
+    if comando == "LIBERAR":
+        print("Iniciando lançamento")
+        lancar()
 
 
 def carregar_config():
@@ -77,10 +90,10 @@ if config:
     WIFI_SSID = config.get('WIFI_SSID')
     WIFI_PWD  = config.get('WIFI_PWD')
     MQTT_SERVER = config.get('MQTT_SERVER')
-    MQTT_PORT   = int(config.get('MQTT_PORT', 8883)) 
-    MQTT_USER   = config.get('MQTT_USER').encode()  
-    MQTT_PWD    = config.get('MQTT_PWD').encode()    
-    TOPIC_PUB   = config.get('MQTT_TOPIC').encode()  
+    MQTT_PORT   = int(config.get('MQTT_PORT', 8883))
+    MQTT_USER   = config.get('MQTT_USER').encode()
+    MQTT_PWD    = config.get('MQTT_PWD').encode()
+    TOPIC_PUB   = config.get('MQTT_TOPIC').encode()
 else:
     print(".env não encontrado ou vazio!")
 
@@ -90,8 +103,8 @@ rede = network.WLAN(network.STA_IF)
 rede.active(True)
 rede.connect(WIFI_SSID, WIFI_PWD)
 while not rede.isconnected():
-  print(".", end="")
-  sleep(0.5)
+    print(".", end="")
+    sleep(0.5)
 print("\nConectado em", rede.ifconfig()[0])
 
 
@@ -101,13 +114,13 @@ client_id = ubinascii.hexlify(machine.unique_id())
 
 try:
     client = MQTTClient(
-        client_id, 
+        client_id,
         MQTT_SERVER,
         port=MQTT_PORT,
         user=MQTT_USER,
         password=MQTT_PWD,
         ssl=True,
-        ssl_params={'server_hostname': MQTT_SERVER} 
+        ssl_params={'server_hostname': MQTT_SERVER}
     )
     client.set_callback(cbTrataMsg)
     client.connect()
@@ -156,6 +169,7 @@ while True:
         if sensor2.value() == 0 and tempo2 == 0:
             tempo2 = time.ticks_ms() 
             print("Sensor 2 ativado!")
+        
         
     except OSError as e:
         print("Erro de conexão detectado:", e)
