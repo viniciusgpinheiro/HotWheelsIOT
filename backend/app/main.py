@@ -1,6 +1,10 @@
 from time import sleep
 from umqtt import MQTTClient
+<<<<<<< Updated upstream
 from machine import Pin
+=======
+from servo import lancar
+>>>>>>> Stashed changes
 import ubinascii
 import machine
 import network
@@ -9,10 +13,18 @@ import ujson
 import onewire, ds18x20, os
 
 
-def cbTrataMsg(topic, msg):
-    print(f'Msg recebida no tópico: {topic.decode("utf-8")}')
-    print(msg.decode('utf-8'))
+def cbTrataMsg(topic,msg):
 
+    comando = msg.decode()
+
+    print("Mensagem recebida:")
+    print(comando)
+
+    if comando == "LIBERAR":
+
+        print("Iniciando lançamento")
+
+        lancar()
 
 def carregar_config():
     conf = {}
@@ -35,10 +47,10 @@ if config:
     WIFI_SSID = config.get('WIFI_SSID')
     WIFI_PWD  = config.get('WIFI_PWD')
     MQTT_SERVER = config.get('MQTT_SERVER')
-    MQTT_PORT   = int(config.get('MQTT_PORT', 8883)) 
-    MQTT_USER   = config.get('MQTT_USER').encode()  
-    MQTT_PWD    = config.get('MQTT_PWD').encode()    
-    TOPIC_PUB   = config.get('MQTT_TOPIC').encode()  
+    MQTT_PORT   = int(config.get('MQTT_PORT', 8883))
+    MQTT_USER   = config.get('MQTT_USER').encode()
+    MQTT_PWD    = config.get('MQTT_PWD').encode()
+    TOPIC_PUB   = config.get('MQTT_TOPIC').encode()
 else:
     print(".env não encontrado ou vazio!")
 
@@ -48,8 +60,8 @@ rede = network.WLAN(network.STA_IF)
 rede.active(True)
 rede.connect(WIFI_SSID, WIFI_PWD)
 while not rede.isconnected():
-  print(".", end="")
-  sleep(0.5)
+    print(".", end="")
+    sleep(0.5)
 print("\nConectado em", rede.ifconfig()[0])
 
 
@@ -59,13 +71,13 @@ client_id = ubinascii.hexlify(machine.unique_id())
 
 try:
     client = MQTTClient(
-        client_id, 
+        client_id,
         MQTT_SERVER,
         port=MQTT_PORT,
         user=MQTT_USER,
         password=MQTT_PWD,
         ssl=True,
-        ssl_params={'server_hostname': MQTT_SERVER} 
+        ssl_params={'server_hostname': MQTT_SERVER}
     )
     client.set_callback(cbTrataMsg)
     client.connect()
@@ -98,6 +110,7 @@ def velocidade(dist, temp1, temp2):
 while True:
     try:
         client.check_msg()
+<<<<<<< Updated upstream
 
         if (tempo1 != 0 and tempo2 != 0) or (
             tempo1 != 0 and (time.ticks_diff(time.ticks_ms(), tempo1)/1000) > (2 * math.pi * math.sqrt(raio / 9.8)) + 2):
@@ -119,6 +132,13 @@ while True:
         if sensor2.value() == 0 and tempo2 == 0:
             tempo2 = time.ticks_ms() 
             print("Sensor 2 ativado!")
+=======
+        valor_temp = "Joao Bobo"
+        msg_json = '{"msg": "' + valor_temp + '"}'
+        print(f"Publicando: {msg_json}")
+        client.publish(TOPIC_PUB, msg_json)
+        sleep(5)
+>>>>>>> Stashed changes
         
     except OSError as e:
         print("Erro de conexão detectado:", e)
