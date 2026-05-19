@@ -1,17 +1,59 @@
+from machine import Pin, PWM
 from time import sleep
 from umqtt import MQTTClient
-from machine import Pin
-import ubinascii
 import machine
 import network
-import time, math
+import onewire
+import ds18x20
+import ubinascii
 import ujson
-import onewire, ds18x20, os
+import json
+import time
+import math
+import os
 
 
+# --- utilitarias --- 
+def velocidade(dist, temp1, temp2):
+    dif_ms = time.ticks_diff(temp2, temp1)
+    dif_segundos = dif_ms / 1000
+
+    if dif_segundos <= 0:
+        return 0
+    
+    velocidade_ms = dist / dif_segundos
+    velocidade_kmh = velocidade_ms * 3.6
+    return velocidade_kmh
+
+
+def servo_motor():
+    global servo, servo_etapa, servo_tempo
+
+    if servo_etapa == 0:
+        return
+    
+    if servo_etapa == 1:
+        servo.duty(26)
+        if time.ticks_diff(time.ticks_ms(), servo_tempo) > 500:
+            servo_etapa = 2
+            servo_tempo = time.ticks_ms()
+
+    elif servo_etapa == 2:
+        servo.duty(123)
+        if time.ticks_diff(time.ticks_ms(), servo_tempo) > 500:
+            servo_etapa = 0
+
+
+# --- umqtt ---
 def cbTrataMsg(topic, msg):
+    global servo_etapa, servo_tempo
+
     print(f'Msg recebida no tópico: {topic.decode("utf-8")}')
-    print(msg.decode('utf-8'))
+    data = json.loads(msg.decode('utf-8'))
+
+    if data.get("fire") and servo_etapa == 0:
+        servo_etapa = 1
+        servo_tempo = time.ticks_ms()
 
 
 def carregar_config():
@@ -78,26 +120,21 @@ except OSError as e:
 
 
 # --- Loop ---
+servo = PWM(Pin(22, Pin.OUT))
+servo.freq(50)
+servo_etapa = 0
+servo_tempo = 0
+
 sensor1 = Pin(18, Pin.IN)
 sensor2 = Pin(4, Pin.IN)
 tempo1, tempo2 = 0, 0
 distancia = 0.93
 raio = 0.12
 
-def velocidade(dist, temp1, temp2):
-    dif_ms = time.ticks_diff(temp2, temp1)
-    dif_segundos = dif_ms / 1000
-
-    if dif_segundos <= 0:
-        return 0
-    
-    velocidade_ms = dist / dif_segundos
-    velocidade_kmh = velocidade_ms * 3.6
-    return velocidade_kmh
-
 while True:
     try:
         client.check_msg()
+        servo_motor()
 
         if (tempo1 != 0 and tempo2 != 0) or (
             tempo1 != 0 and (time.ticks_diff(time.ticks_ms(), tempo1)/1000) > (2 * math.pi * math.sqrt(raio / 9.8)) + 2):
