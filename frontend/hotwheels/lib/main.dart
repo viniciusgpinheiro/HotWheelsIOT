@@ -35,11 +35,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ==========================================
   // CONFIGURAÇÕES BROKER MQTT
   // ==========================================
-  final String brokerUrl = 'wss://SEU_BROKER.COM'; // Ex: wss://broker.hivemq.com (Use wss:// para web)
-  final int brokerPort = 8884;
-  final String mqttUser = 'SEU_USUARIO';
-  final String mqttPass = 'SUA_SENHA';
-  final String mqttTopic = 'SEU/TOPICO/AQUI'; // O mesmo TOPIC_PUB do ESP32
+  final String brokerUrl = 'wss://1638f261a5864ed5b1ec3b3c10376baa.s1.eu.hivemq.cloud';
+  final int brokerPort = 8884; 
+  final String mqttUser = 'Cotuca';
+  final String mqttPass = 'Cotuca123';
+  final String mqttTopic = 'HotWheelsIOT';
 
   MqttBrowserClient? client;
   bool isConnected = false;
