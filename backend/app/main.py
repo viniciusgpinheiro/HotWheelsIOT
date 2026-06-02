@@ -2,6 +2,8 @@ from machine import Pin, PWM
 from time import sleep
 from umqtt import MQTTClient
 from servo import lancar
+from display import contagem
+from display import mostrar_resultado
 import machine
 import network
 import onewire
@@ -14,7 +16,7 @@ import math
 import os
 
 
-# --- utilitarias --- 
+# --- utilitarias ---
 def velocidade(dist, temp1, temp2):
     dif_ms = time.ticks_diff(temp2, temp1)
     dif_segundos = dif_ms / 1000
@@ -26,6 +28,11 @@ def velocidade(dist, temp1, temp2):
     #velocidade_kmh = velocidade_ms * 3.6
     return velocidade_ms
 
+def tempo_percurso(temp1, temp2):
+
+    dif_ms = time.ticks_diff(temp2, temp1)
+
+    return dif_ms / 1000
 
 def servo_motor():
     global servo, servo_etapa, servo_tempo
@@ -49,16 +56,40 @@ def servo_motor():
 
 def cbTrataMsg(topic, msg):
     global servo_etapa, servo_tempo
+
     mensagem = msg.decode('utf-8')
+
     print(f"Mensagem recebida: {mensagem}")
+    print(f"Tópico: {topic.decode('utf-8')}")
 
     try:
+
         data = ujson.loads(mensagem)
+
+        # comando enviado pelo app
         if data.get("comando") == "LANCAR" and servo_etapa == 0:
+
             print("Iniciando lançamento pelo App!")
+
+            # mostra 3 2 1 GO
+            contagem()
+
+            # inicia servo
             servo_etapa = 1
             servo_tempo = time.ticks_ms()
+
+        # compatibilidade com seu código antigo
+        elif data.get("fire") and servo_etapa == 0:
+
+            print("Iniciando lançamento pelo Fire!")
+
+            contagem()
+
+            servo_etapa = 1
+            servo_tempo = time.ticks_ms()
+
     except Exception as e:
+
         print("Erro ao decodificar JSON do App:", e)
 
 
@@ -150,13 +181,28 @@ while True:
                 dif_ms = time.ticks_diff(tempo2, tempo1)
                 tempo_total = dif_ms / 1000 if dif_ms > 0 else 0
                 vel_final = round(velocidade(distancia, tempo1, tempo2), 2)
+            vel = velocidade(
+                distancia,
+                tempo1,
+                tempo2
+            )
+
+            tempo_total = tempo_percurso(
+                tempo1,
+                tempo2
+            )
+
+            mostrar_resultado(
+                tempo_total,
+                vel
+            )
 
             msg_json = {
-                "sensor1" : tempo1,
-                "sensor2" : tempo2,
-                "distancia" : distancia,
+                "sensor1": tempo1,
+                "sensor2": tempo2,
                 "tempo": tempo_total,
-                "velocidade" : vel_final
+                "distancia": distancia,
+                "velocidade": vel
             }
             print(f"Publicando: {msg_json}")
             client.publish(TOPIC_PUB, ujson.dumps(msg_json))
