@@ -23,8 +23,8 @@ def velocidade(dist, temp1, temp2):
         return 0
     
     velocidade_ms = dist / dif_segundos
-    velocidade_kmh = velocidade_ms * 3.6
-    return velocidade_kmh
+    #velocidade_kmh = velocidade_ms * 3.6
+    return velocidade_ms
 
 
 def servo_motor():
@@ -47,26 +47,19 @@ def servo_motor():
 
 # --- umqtt ---
 
-# v1
 def cbTrataMsg(topic, msg):
     global servo_etapa, servo_tempo
+    mensagem = msg.decode('utf-8')
+    print(f"Mensagem recebida: {mensagem}")
 
-    print(f'Msg recebida no tópico: {topic.decode("utf-8")}')
-    data = json.loads(msg.decode('utf-8'))
-
-    if data.get("fire") and servo_etapa == 0:
-        servo_etapa = 1
-        servo_tempo = time.ticks_ms()
-
-# v2
-def cbTrataMsg(topic, msg):
-    comando = msg.decode()
-    print("Mensagem recebida:")
-    print(comando)
-
-    if comando == "LIBERAR":
-        print("Iniciando lançamento")
-        lancar()
+    try:
+        data = ujson.loads(mensagem)
+        if data.get("comando") == "LANCAR" and servo_etapa == 0:
+            print("Iniciando lançamento pelo App!")
+            servo_etapa = 1
+            servo_tempo = time.ticks_ms()
+    except Exception as e:
+        print("Erro ao decodificar JSON do App:", e)
 
 
 def carregar_config():
@@ -84,7 +77,6 @@ def carregar_config():
         return None
 
 
-# --- Pegando informações .env ---
 config = carregar_config()
 if config:
     WIFI_SSID = config.get('WIFI_SSID')
@@ -98,7 +90,6 @@ else:
     print(".env não encontrado ou vazio!")
 
 
-# --- Conectando com a Rede ---
 rede = network.WLAN(network.STA_IF)
 rede.active(True)
 rede.connect(WIFI_SSID, WIFI_PWD)
@@ -108,7 +99,6 @@ while not rede.isconnected():
 print("\nConectado em", rede.ifconfig()[0])
 
 
-# --- Configurando MQTT ---
 print("Inicializando conexão com o broker...")
 client_id = ubinascii.hexlify(machine.unique_id())
 
@@ -132,7 +122,6 @@ except OSError as e:
     machine.reset()
 
 
-# --- Loop ---
 servo = PWM(Pin(22, Pin.OUT))
 servo.freq(50)
 servo_etapa = 0
@@ -152,11 +141,22 @@ while True:
         if (tempo1 != 0 and tempo2 != 0) or (
             tempo1 != 0 and (time.ticks_diff(time.ticks_ms(), tempo1)/1000) > (2 * math.pi * math.sqrt(raio / 9.8)) + 2):
 
+
+            if tempo2 == 0:
+                tempo_total = 0
+                vel_final = 0
+                print("Timeout detectado! O carrinho não chegou ao sensor 2.")
+            else: 
+                dif_ms = time.ticks_diff(tempo2, tempo1)
+                tempo_total = dif_ms / 1000 if dif_ms > 0 else 0
+                vel_final = round(velocidade(distancia, tempo1, tempo2), 2)
+
             msg_json = {
                 "sensor1" : tempo1,
                 "sensor2" : tempo2,
                 "distancia" : distancia,
-                "velocidade" : velocidade(distancia, tempo1, tempo2)
+                "tempo": tempo_total,
+                "velocidade" : vel_final
             }
             print(f"Publicando: {msg_json}")
             client.publish(TOPIC_PUB, ujson.dumps(msg_json))

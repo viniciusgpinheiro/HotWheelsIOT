@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_browser_client.dart'; // Usado para rodar no Chrome
-
+import 'package:mqtt_client/mqtt_browser_client.dart';
 void main() {
   runApp(const HotWheelsLabApp());
 }
@@ -35,11 +34,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ==========================================
   // CONFIGURAÇÕES BROKER MQTT
   // ==========================================
-  final String brokerUrl = 'wss://SEU_BROKER.COM'; // Ex: wss://broker.hivemq.com (Use wss:// para web)
+  final String brokerUrl = 'wss://1638f261a5864ed5b1ec3b3c10376baa.s1.eu.hivemq.cloud';
   final int brokerPort = 8884;
-  final String mqttUser = 'SEU_USUARIO';
-  final String mqttPass = 'SUA_SENHA';
-  final String mqttTopic = 'SEU/TOPICO/AQUI'; // O mesmo TOPIC_PUB do ESP32
+  final String mqttUser = 'Cotuca';
+  final String mqttPass = 'Cotuca123';
+  final String mqttTopic = 'HotWheelsIOT';
 
   MqttBrowserClient? client;
   bool isConnected = false;
@@ -137,7 +136,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         centerTitle: true,
         backgroundColor: Colors.black12,
         actions: [
-          // Ícone muda de cor dependendo da conexão
           IconButton(
             icon: Icon(
               isConnected ? Icons.wifi : Icons.wifi_off,
@@ -154,7 +152,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- Área de Status do ESP32 ---
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
