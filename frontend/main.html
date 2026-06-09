@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Looping - MQTT HotWheels</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: #333;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+
+        #mqtt-status {
+            font-size: 14px;
+            margin-bottom: 30px;
+            font-weight: bold;
+            color: #7f8c8d;
+        }
+
+        .controls {
+            margin-bottom: 30px;
+        }
+
+        .btn-launch {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+
+        .btn-launch:hover:not(:disabled) {
+            background-color: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+        }
+
+        .btn-launch:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-launch:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 20px;
+        }
+
+        .box {
+            background-color: white;
+            border-radius: 12px;
+            padding: 25px;
+            width: 200px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border-top: 5px solid #3498db;
+        }
+
+        .box h3 {
+            font-size: 14px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .box .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .status-success {
+            color: #2ecc71 !important;
+        }
+
+        .status-fail {
+            color: #e74c3c !important;
+        }
+
+        .status-waiting {
+            color: #7f8c8d !important;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+</head>
+<body>
+
+    <h1>Painel de Controle do Carrinho</h1>
+    <div id="mqtt-status">Conectando ao HiveMQ...</div>
+
+    <div class="controls">
+        <button class="btn-launch" id="launchBtn" disabled>LANÇAR CARRINHO</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="box">
+            <h3>Velocidade</h3>
+            <div class="value" id="speedBox">0 km/h</div>
+        </div>
+
+        <div class="box" id="statusCard">
+            <h3>Looping</h3>
+            <div class="value status-waiting" id="statusBox">Aguardando...</div>
+        </div>
+    </div>
+
+    <script>
+        const launchBtn = document.getElementById('launchBtn');
+        const speedBox = document.getElementById('speedBox');
+        const statusBox = document.getElementById('statusBox');
+        const mqttStatusText = document.getElementById('mqtt-status');
+
+        // Configurações do MQTT extraídas da sua imagem e credenciais
+        const MQTT_HOST = "1638f261a5864ed5b1ec3b3c10376baa.s1.eu.hivemq.cloud";
+        const MQTT_PORT = 8884; // Porta WebSocket TLS
+        const MQTT_PATH = "/mqtt";
+        const MQTT_TOPIC = "HotWheelsIOT";
+        const MQTT_USER = "Cotuca";
+        const MQTT_PASS = "Cotuca123";
+
+        // Inicializa o cliente MQTT gerando um ID aleatório único para a sessão
+        const clientId = "web_client_" + Math.random().toString(16).substr(2, 8);
+        const client = new Paho.MQTT.Client(MQTT_HOST, MQTT_PORT, MQTT_PATH, clientId);
+
+        // Define os callbacks do cliente
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        // Opções de conexão corrigidas (sem a propriedade inválida 'reconnect')
+        const connectOptions = {
+            useSSL: true,
+            userName: MQTT_USER,
+            password: MQTT_PASS,
+            onSuccess: onConnect,
+            onFailure: onFailure,
+            timeout: 3,
+            keepAliveInterval: 30
+        };
+
+        // Função para iniciar a conexão
+        function conectarAoBroker() {
+            console.log("Tentando conectar ao HiveMQ...");
+            client.connect(connectOptions);
+        }
+
+        // Inicia a primeira tentativa de conexão ao carregar a página
+        conectarAoBroker();
+
+        function onConnect() {
+            console.log("Conectado com sucesso ao HiveMQ!");
+            mqttStatusText.textContent = "Conectado ao HiveMQ";
+            mqttStatusText.style.color = "#2ecc71";
+            launchBtn.disabled = false; // Ativa o botão após conectar
+
+            // Inscreve-se no tópico para escutar os dados do carrinho
+            client.subscribe(MQTT_TOPIC);
+        }
+
+        function onFailure(message) {
+            console.log("Falha na conexão: " + message.errorMessage);
+            mqttStatusText.textContent = "Erro de conexão: " + message.errorMessage + ". Tentando novamente em 5s...";
+            mqttStatusText.style.color = "#e74c3c";
+            launchBtn.disabled = true;
+            
+            // Tenta reconectar após 5 segundos se falhar na primeira tentativa
+            setTimeout(conectarAoBroker, 5000);
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Conexão perdida: " + responseObject.errorMessage);
+                mqttStatusText.textContent = "Conexão perdida. Tentando reconectar...";
+                mqttStatusText.style.color = "#f39c12";
+                launchBtn.disabled = true;
+                
+                // Tenta reconectar imediatamente após cair a conexão
+                conectarAoBroker();
+            }
+        }
+
+        // Evento de clique no botão Lançar
+        launchBtn.addEventListener('click', () => {
+            // Cria a mensagem estruturada exigida
+            const payload = JSON.stringify({ comando: "LANCAR" });
+            const message = new Paho.MQTT.Message(payload);
+            message.destinationName = MQTT_TOPIC;
+            
+            // Envia para o HiveMQ
+            client.send(message);
+            console.log("Comando enviado: " + payload);
+
+            // Atualiza a interface aguardando o retorno dos sensores
+            statusBox.textContent = "Lançado...";
+            statusBox.className = "value status-waiting";
+            speedBox.textContent = "Calculando...";
+        });
+
+        // Evento disparado constantemente ao receber mensagens no tópico inscrito
+        function onMessageArrived(message) {
+            console.log("Mensagem recebida: " + message.payloadString);
+            
+            try {
+                // Converte o texto recebido em objeto JSON
+                const dados = JSON.parse(message.payloadString);
+
+                // Verifica se o JSON recebido possui a estrutura esperada do carrinho
+                if (dados.hasOwnProperty('velocidade') || dados.hasOwnProperty('vel')) {
+                    
+                    // Aceita tanto a chave 'vel' quanto 'velocidade' baseado no seu exemplo
+                    const velocidade = dados.vel !== undefined ? dados.vel : dados.velocidade;
+                    
+                    // Exibe a velocidade no box correspondente
+                    speedBox.textContent = `${velocidade} km/h`;
+
+                    // Lógica para determinar se completou o looping baseado na velocidade recebida
+                    if (velocidade >= 0) {
+                        statusBox.textContent = "COMPLETOU!";
+                        statusBox.className = "value status-success";
+                    } else {
+                        statusBox.textContent = "FALHOU!";
+                        statusBox.className = "value status-fail";
+                    }
+                }
+            } catch (error) {
+                // Caso receba alguma string que não seja um JSON válido, evita crashar a página
+                console.warn("Mensagem recebida não estava no formato JSON esperado.", error);
+            }
+        }
+    </script>
+
+</body>
+</html>
