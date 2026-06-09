@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_browser_client.dart'; // Usado para rodar no Chrome
+import 'package:mqtt_client/mqtt_browser_client.dart';
 
 void main() {
   runApp(const HotWheelsLabApp());
@@ -33,9 +33,9 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // ==========================================
-  // CONFIGURAÇÕES BROKER MQTT
+  // CONFIGURAÇÕES BROKER MQTT (Corrigido para Web)
   // ==========================================
-  final String brokerUrl = 'wss://1638f261a5864ed5b1ec3b3c10376baa.s1.eu.hivemq.cloud';
+  final String brokerUrl = '1638f261a5864ed5b1ec3b3c10376baa.s1.eu.hivemq.cloud';
   final int brokerPort = 8884; 
   final String mqttUser = 'Cotuca';
   final String mqttPass = 'Cotuca123';
@@ -43,7 +43,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   MqttBrowserClient? client;
   bool isConnected = false;
-  String mensagemRecebida = 'Nenhuma mensagem ainda...';
+  String mensagemRecebida = 'Aguardando telemetria...';
+
+  String velocidade = '0.00';
+  String tempo = '0.000';
+  String distancia = '0.00';
 
   @override
   void initState() {
@@ -52,15 +56,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _setupMqtt() async {
-    // Configura o cliente para WebSockets
-    client = MqttBrowserClient(brokerUrl, 'flutter_web_client_${DateTime.now().millisecondsSinceEpoch}');
+    final String dynamicClientId = 'flutter_web_${DateTime.now().millisecondsSinceEpoch}';
+    
+    client = MqttBrowserClient(brokerUrl, dynamicClientId);
     client!.port = brokerPort;
     client!.keepAlivePeriod = 20;
     client!.onConnected = _onConnected;
     client!.onDisconnected = _onDisconnected;
+    
+    client!.secure = true; 
 
     final connMess = MqttConnectMessage()
-        .withClientIdentifier('flutter_web_client')
+        .withClientIdentifier(dynamicClientId)
         .authenticateAs(mqttUser, mqttPass)
         .startClean()
         .withWillQos(MqttQos.atLeastOnce);
@@ -68,33 +75,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     client!.connectionMessage = connMess;
 
     try {
-      print('Conectando ao broker MQTT...');
+      print('Conectando ao broker MQTT no modo seguro...');
       await client!.connect();
     } catch (e) {
       print('Erro ao conectar: $e');
       client!.disconnect();
     }
 
-    // Se conectou com sucesso, inscreve no tópico
     if (client!.connectionStatus!.state == MqttConnectionState.connected) {
       client!.subscribe(mqttTopic, MqttQos.atMostOnce);
       
-      // Fica escutando as mensagens do ESP32
       client!.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
         final recMess = c![0].payload as MqttPublishMessage;
         final payload = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
         
-        print('Mensagem recebida: $payload');
+        print('Mensagem crua recebida: $payload');
         
-        // Atualiza a tela com o valor recebido
         setState(() {
+          mensagemRecebida = payload;
           try {
+            // Processando o JSON real enviado pelo seu novo código do ESP32
             var data = jsonDecode(payload);
-            if (data.containsKey('msg')) {
-              mensagemRecebida = data['msg'];
+            
+            if (data.containsKey('velocidade')) {
+              velocidade = data['velocidade'].toString();
+            }
+            if (data.containsKey('tempo')) {
+              tempo = data['tempo'].toString();
+            }
+            if (data.containsKey('distancia')) {
+              distancia = data['distancia'].toString();
             }
           } catch (e) {
-            mensagemRecebida = payload; // Se não for JSON, mostra o texto puro
+            print('Erro ao processar chaves do JSON: $e');
           }
         });
       });
@@ -115,7 +128,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     print('MQTT Desconectado!');
   }
 
-  // Função disparada ao apertar o botão
   void _lancarCarrinho() {
     if (isConnected && client != null) {
       const comandoStr = '{"comando": "LANCAR"}';
@@ -133,20 +145,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Projeto Hot Wheels'),
+        title: const Text('Projeto Hot Wheels - Física'),
         centerTitle: true,
         backgroundColor: Colors.black12,
         actions: [
-          // Ícone muda de cor dependendo da conexão
-          IconButton(
-            icon: Icon(
-              isConnected ? Icons.wifi : Icons.wifi_off,
-              color: isConnected ? Colors.green : Colors.red,
-            ),
-            onPressed: () {},
-            tooltip: isConnected ? 'Conectado' : 'Desconectado',
+          Icon(
+            isConnected ? Icons.wifi : Icons.wifi_off,
+            color: isConnected ? Colors.green : Colors.red,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 20),
         ],
       ),
       body: SingleChildScrollView(
@@ -167,8 +174,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'ESP32 Diz: $mensagemRecebida',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      'Log JSON: $mensagemRecebida',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'monospace'),
                     ),
                   ),
                 ],
@@ -181,8 +188,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 10),
             Center(
               child: SizedBox(
-                width: 200,
-                height: 200,
+                width: 180,
+                height: 180,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isConnected ? Colors.redAccent : Colors.grey,
@@ -194,10 +201,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.rocket_launch, size: 50),
+                      const Icon(Icons.rocket_launch, size: 45),
                       Text(
                         isConnected ? 'LANÇAR' : 'OFFLINE', 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
                       ),
                     ],
                   ),
@@ -211,10 +218,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Expanded(child: _buildInputField('Altura (cm)', Icons.height)),
                 const SizedBox(width: 10),
-                Expanded(child: _buildInputField('Distância (cm) até o sensor', Icons.straighten)),
+                Expanded(child: _buildInputField('Distância Configurada: $distancia m', Icons.straighten)),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
             _buildSectionTitle('Telemetria do Último Lançamento'),
             GridView.count(
@@ -223,12 +230,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisCount: 2,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: 1.5,
+              childAspectRatio: 1.4,
               children: [
-                _buildDataCard('Velocidade', '0.00 m/s', Icons.speed, Colors.greenAccent),
-                _buildDataCard('Tempo Total', '0.000 s', Icons.timer, Colors.blueAccent),
-                _buildDataCard('Aceleração', '0.0 m/s²', Icons.trending_up, Colors.orangeAccent),
-                _buildDataCard('E. Cinética', '0.00 J', Icons.bolt, Colors.purpleAccent),
+                _buildDataCard('Velocidade', '$velocidade m/s', Icons.speed, Colors.greenAccent),
+                _buildDataCard('Tempo Total', '$tempo s', Icons.timer, Colors.blueAccent),
+                _buildDataCard('Aceleração Média', '${velocidade == '0.00' || tempo == '0.000' ? '0.0' : (double.parse(velocidade)/double.parse(tempo)).toStringAsFixed(2)} m/s²', Icons.trending_up, Colors.orangeAccent),
+                _buildDataCard('Distância do Trilho', '$distancia m', Icons.space_bar, Colors.purpleAccent),
               ],
             ),
           ],
@@ -242,7 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Text(
         title.toUpperCase(),
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
       ),
     );
   }
@@ -272,10 +279,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 5),
-                Text(title, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(title, style: const TextStyle(fontSize: 11, color: Colors.white70)),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 8),
             Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
