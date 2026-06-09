@@ -204,11 +204,11 @@ while True:
             tempo1, tempo2 = 0, 0
 
         if sensor1.value() == 0 and tempo1 == 0:
-            tempo1 = time.ticks_ms() 
+            tempo1 = time.ticks_ms()
             print("Sensor 1 ativado!")
 
         if sensor2.value() == 0 and tempo2 == 0:
-            tempo2 = time.ticks_ms() 
+            tempo2 = time.ticks_ms()
             print("Sensor 2 ativado!")
         
         
