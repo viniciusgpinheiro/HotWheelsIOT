@@ -1,19 +1,14 @@
 from machine import Pin, PWM
 from time import sleep
 from umqtt import MQTTClient
-from servo import lancar
 from display import contagem
 from display import mostrar_resultado
 import machine
 import network
-import onewire
-import ds18x20
 import ubinascii
 import ujson
-import json
 import time
 import math
-import os
 
 
 # --- utilitarias ---
