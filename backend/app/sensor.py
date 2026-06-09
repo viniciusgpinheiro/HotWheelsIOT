@@ -12,12 +12,12 @@ print("--- Aguardando passagem pelos sensores ---")
 
 while tempo1 == 0:
     if sensor1.value() == 0:
-        tempo1 = time.ticks_ms() 
+        tempo1 = time.ticks_ms()
         print("Sensor 1 ativado!")
 
 while tempo2 == 0:
     if sensor2.value() == 0:
-        tempo2 = time.ticks_ms() 
+        tempo2 = time.ticks_ms()
         print("Sensor 2 ativado!")
 
 
