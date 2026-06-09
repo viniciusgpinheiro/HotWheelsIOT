@@ -16,10 +16,12 @@ Para isso, foi desenvolvido um sistema utilizando ESP32, sensores de passagem, s
 * Pistas Hot Wheels
 * Rede Wi-Fi
 * Broker MQTT
-* Computador para programação
+* Computador
 * Aplicativo para envio de comandos
 * Cabos e protoboard
 * Fonte de alimentação
+* Base de impressora 3d para o looping
+* fita adesiva
 
 ---
 

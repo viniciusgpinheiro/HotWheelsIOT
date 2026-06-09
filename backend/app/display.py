@@ -1,61 +1,103 @@
-from machine import Pin, SPI
-import max7219
+from machine import Pin
+import neopixel
 import time
 
-# AJUSTE OS PINOS SE NECESSÁRIO
-spi = SPI(
-    1,
-    baudrate=10000000,
-    polarity=0,
-    phase=0,
-    sck=Pin(14),
-    mosi=Pin(23)
+# ==========================
+# CONFIGURAÇÃO
+# ==========================
+
+PINO_DISPLAY = 5
+NUM_LEDS = 48
+
+np = neopixel.NeoPixel(
+    Pin(PINO_DISPLAY),
+    NUM_LEDS
 )
 
-cs = Pin(5, Pin.OUT)
 
-display = max7219.Matrix8x8(spi, cs, 4)
-
-display.brightness(5)
-
+# ==========================
+# FUNÇÕES BÁSICAS
+# ==========================
 
 def limpar():
-    display.fill(0)
-    display.show()
+
+    for i in range(NUM_LEDS):
+        np[i] = (0, 0, 0)
+
+    np.write()
 
 
-def mostrar(texto):
+def preencher(cor):
 
-    texto = str(texto)
+    for i in range(NUM_LEDS):
+        np[i] = cor
 
-    display.fill(0)
-    display.text(texto, 0, 0, 1)
-    display.show()
+    np.write()
 
 
-def contagem():
+# ==========================
+# TESTE
+# ==========================
 
-    mostrar("3")
+def teste():
+
+    preencher((255, 0, 0))
     time.sleep(1)
 
-    mostrar("2")
+    preencher((0, 255, 0))
     time.sleep(1)
 
-    mostrar("1")
-    time.sleep(1)
-
-    mostrar("GO!")
+    preencher((0, 0, 255))
     time.sleep(1)
 
     limpar()
 
 
-def mostrar_resultado(tempo, velocidade):
+# ==========================
+# CONTAGEM
+# ==========================
 
-    mostrar("T:{:.2f}".format(tempo))
-    time.sleep(3)
+def contagem():
 
-    mostrar("V:{:.2f}".format(velocidade))
-    time.sleep(3)
+    # 3 = vermelho
+    preencher((255, 0, 0))
+    print("3")
+    time.sleep(1)
+
+    # 2 = amarelo
+    preencher((255, 255, 0))
+    print("2")
+    time.sleep(1)
+
+    # 1 = azul
+    preencher((0, 0, 255))
+    print("1")
+    time.sleep(1)
+
+    # GO = verde
+    preencher((0, 255, 0))
+    print("GO!")
+    time.sleep(1)
+
+    limpar()
+
+
+# ==========================
+# RESULTADO
+# ==========================
+
+def mostrar_resultado(
+    tempo,
+    velocidade
+):
+
+    print("----------------")
+    print("TEMPO:", tempo)
+    print("VELOCIDADE:", velocidade)
+    print("----------------")
+
+    # verde = resultado recebido
+    preencher((0, 255, 0))
+    time.sleep(2)
 
     limpar()
